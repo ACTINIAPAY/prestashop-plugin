@@ -8,9 +8,7 @@
  *  @version    1.0.0
  */
 
-require_once(dirname(__FILE__) . '../../../actinia.php');
-require_once(dirname(__FILE__) . '../../../actinia.cls.php');
-
+require_once __DIR__ . '/../../ActiniaApi.php';
 class ActiniaCallbackModuleFrontController extends ModuleFrontController
 {
     public $display_column_left = false;
@@ -19,72 +17,73 @@ class ActiniaCallbackModuleFrontController extends ModuleFrontController
     public $display_footer = false;
     public $ssl = true;
 
+    protected $merchant, $clientcodename, $privatekey, $testmode, $success_status_id,
+        $settingsList = [
+        'ACTINIA_MERCHANT',
+        'ACTINIA_CLIENTCODENAME',
+        'ACTINIA_PRIVATEKEY',
+        'ACTINIA_TESTMODE',
+        'ACTINIA_SUCCESS_STATUS_ID',
+    ];
+
+    public function __construct()
+    {
+        parent::__construct();
+
+        $config = Configuration::getMultiple($this->settingsList);
+
+        if (!empty($config['ACTINIA_MERCHANT'])) {
+            $this->merchant = $config['ACTINIA_MERCHANT'];
+        }
+        if (!empty($config['ACTINIA_CLIENTCODENAME'])) {
+            $this->clientcodename = $config['ACTINIA_CLIENTCODENAME'];
+        }
+        if (!empty($config['ACTINIA_PRIVATEKEY'])) {
+            $this->privatekey = $config['ACTINIA_PRIVATEKEY'];
+        }
+        if (!empty($config['ACTINIA_TESTMODE'])) {
+            $this->testmode = $config['ACTINIA_TESTMODE'];
+        }
+        if (!empty($config['ACTINIA_SUCCESS_STATUS_ID'])) {
+            $this->success_status_id = $config['ACTINIA_SUCCESS_STATUS_ID'];
+        }
+    }
+
     /**
      * @see FrontController::postProcess()
      */
     public function postProcess()
     {
-        $data = $_POST;
-        if (empty($data)) {
-            $fap = json_decode(Tools::file_get_contents("php://input"));
-            if (empty($fap)) {
-                die('Bad request');
-            }
-            $data = array();
-            foreach ($fap as $key => $val) {
-                $data[$key] = $val;
-            }
-        }
+        $callback = [];
+
         try {
-            if ($data['order_status'] == ActiniaCls::ORDER_DECLINED or
-                $data['order_status'] == ActiniaCls::ORDER_EXPIRED) {
-                list($orderId,) = explode(ActiniaCls::ORDER_SEPARATOR, $data['order_id']);
-                $history = new OrderHistory();
-                $history->id_order = $orderId;
-                $history->changeIdOrderState((int)Configuration::get('PS_OS_ERROR'), $orderId);
-                $history->addWithemail(true, array(
-                    'order_name' => $orderId
-                ));
-                exit('Order declined');
+            $callback = (array)json_decode(file_get_contents("php://input", true));
+            if (empty($callback)) {
+                throw new Exception('callback empty');
             }
 
-            $actinia = new Actinia();
-            list($orderId,) = explode(ActiniaCls::ORDER_SEPARATOR, $data['order_id']);
-            $order = new Order($orderId);
-            $settings = array(
-                'merchant_id' => $actinia->getOption('merchant'),
-                'secret_key' => $actinia->getOption('secret_key')
-            );
+            $actiniaApi = new ActiniaApi($this->testmode);
+            $callback = $actiniaApi->decodeJsonObjToArr($callback, true);
+            $payment = $actiniaApi
+                ->setClientCodeName($this->clientcodename)
+                ->setPrivateKey($this->privatekey)
+                ->chkPublicKey()
+                ->isPaymentValid($callback);
 
-            $isPaymentValid = ActiniaCls::isPaymentValid($settings, $data);
-            if ($isPaymentValid !== true) {
-                exit($isPaymentValid);
+            if ($payment['merchantId'] !== $this->merchant) {
+                throw new Exception('not valid merchantId (|' . $payment['merchantId'] . ' | ' . $this->merchant . '|)');
             }
 
-            if ((float)$order->total_paid != (float)($data['amount'] / 100)) {
-                exit('Amount is invalid');
-            }
-            if ((int)$order->getCurrentState() == (int)Configuration::get('PS_OS_PAYMENT')) {
-                PrestaShopLogger::addLog(
-                    sprintf(
-                        'Order id %s current state %s = expected state %s',
-                        $order->id,
-                        $order->getCurrentState(),
-                        1
-                    ),
-                    3
-                );
-                die('State is already Paid');
-            }
+            list($externalId,) = explode(ActiniaApi::ORDER_SEPARATOR, $payment['externalId']);
+            $order = new Order($externalId);
 
             $history = new OrderHistory();
-            $history->id_order = $orderId;
-            $history->changeIdOrderState((int) Configuration::get('ACTINIA_SUCCESS_STATUS_ID', Configuration::get('PS_OS_PAYMENT')), $orderId);
-            $history->addWithemail(true, array(
-                'order_name' => $orderId
-            ));
+            $history->id_order = (int)$order->id;
+
+            $history->changeIdOrderState((int)$this->success_status_id, (int)($order->id));
 
             exit('OK');
+
         } catch (Exception $e) {
             exit(get_class($e) . ': ' . $e->getMessage());
         }

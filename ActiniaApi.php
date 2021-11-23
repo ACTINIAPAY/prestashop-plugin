@@ -2,10 +2,13 @@
 
 class ActiniaApi
 {
+    const URL_TEST = 'https://api.clients.sandbox.actinia.tech/';
+    const URL_PROD = 'https://api.clients.actinia.tech/';
+
     const ORDER_APPROVED = 'approved';
     const ORDER_DECLINED = 'declined';
 
-    const ORDER_SEPARATOR = '#';
+    const ORDER_SEPARATOR = '_';
 
     const SIGNATURE_SEPARATOR = '|';
     const SESSION_PUBLICKEY_NAME = "actinia_publicKey";
@@ -21,6 +24,7 @@ class ActiniaApi
         'publicKeyGet' => 'v1/host/public/get',
     ];
 
+    protected $url = '';
     protected $clientCodeName = '';
     protected $endpoint = null;
     protected $data = [];
@@ -31,6 +35,17 @@ class ActiniaApi
     protected $isHostPublicKey = true;
     protected $privateKey = null;
 
+    /**
+     * Actinia constructor.
+     * @param false $is_test
+     */
+    public function __construct($is_test = false)
+    {
+        if($is_test)
+            $this->url = self::URL_TEST;
+        else
+            $this->url = self::URL_PROD;
+    }
 
     public function setPrivateKey($val){
         $this->privateKey = $val;
@@ -256,7 +271,7 @@ class ActiniaApi
         try{
             $fields = $this->prepareData();
 
-            $ch = curl_init(self::URL . $this->endpoint);
+            $ch = curl_init($this->url . $this->endpoint);
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $fields);
 
@@ -278,8 +293,7 @@ class ActiniaApi
             return $response;
 
         } catch (Exception $e){
-            $this->resultData = json_decode($response, true);
-            die ('<pre> sendToApi ' . print_r($this->resultData, true) . '<pre>');
+            $this->resultData = json_decode(($response ?? ''), true);
             throw new Exception($this->getErrorMsg());
         }
     }
@@ -312,7 +326,7 @@ class ActiniaApi
      */
     protected function JWTencode($data){
         try{
-            include_once(dirname(__FILE__) . DS . "/jwt/src/JWT.php");
+            include_once(dirname(__FILE__) . "/jwt/src/JWT.php");
             return Firebase\JWT\JWT::encode($data, $this->privateKey, 'RS256');
 
         } catch (Exception $e){
@@ -339,50 +353,56 @@ class ActiniaApi
         }
     }
 
-//    public static function getSignature($data, $password, $encoded = true)
-//    {
-//        $data = array_filter($data);
-//        ksort($data);
-//
-//        $str = $password;
-//        foreach ($data as $k => $v) {
-//            $str .= self::SIGNATURE_SEPARATOR . $v;
-//        }
-//
-//        if ($encoded) {
-//            return sha1($str);
-//        } else {
-//            return $str;
-//        }
-//    }
 
-//    public static function isPaymentValid($actiniaSettings, $response)
-//    {
-//        if ($response['order_status'] == self::ORDER_DECLINED) {
-//            return 'Order was declined.';
-//        }
-//		if ($response['order_status'] != self::ORDER_APPROVED) {
-//            return 'Order was not approv.';
-//        }
-//
-//        if ($actiniaSettings['merchant_id'] != $response['merchant_id']) {
-//            return 'An error has occurred during payment. Merchant data is incorrect.';
-//        }
-//
-//		$originalResponse = $response['signature'];
-//		if (isset($response['response_signature_string'])){
-//			unset($response['response_signature_string']);
-//		}
-//		if (isset($response['signature'])){
-//			unset($response['signature']);
-//		}
-//		if (self::getSignature($response, $actiniaSettings['secret_key']) != $responseSignature) {
-//            return 'Signature is not valid' ;
-//        }
-//
-//
-//        return true;
-//    }
+    /**
+     * @param $data
+     * @param false $isData
+     * @return array
+     */
+    public function decodeJsonObjToArr($data, $isData = false):array{
+        if($isData)
+            $_d = $data;
+        else
+            $_d = (array)json_decode(html_entity_decode($data), true);
+
+        $_d = (array)json_decode(json_encode($_d, JSON_UNESCAPED_UNICODE), true);
+
+        $res = [];
+        foreach ($_d as $key => $item) {
+            if(gettype($item) === 'object') {
+                $res[$key] = (array)$item;
+            }
+            else {
+                $res[$key] = $item;
+            }
+        }
+
+        return $res;
+    }
+
+
+    /**
+     * @param $_data
+     * @return array
+     * @throws Exception
+     */
+    public function isPaymentValid($_data){
+        try{
+            if(!empty($_data['data']) && !empty($_data['token'])) {
+                if($this->isHostPublicKey)
+                    $this->chkHostData((array)$_data['data'], (string)$_data['token']);
+                $this->resultData = $_data['data'];
+            }
+            else
+                throw new Exception('Empty data');
+
+            return (array)$_data['data'];
+
+        } catch (Exception $e){
+            throw new Exception('isPaymentValid: ' . $e->getMessage());
+        }
+
+    }
 
     /**
      * @param $order

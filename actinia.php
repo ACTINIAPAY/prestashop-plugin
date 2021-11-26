@@ -319,7 +319,6 @@ class Actinia extends PaymentModule
                         'type' => 'select',
                         'prefix' => '<i class="icon icon-key"></i>',
                         'name' => 'ACTINIA_SUCCESS_STATUS_ID',
-                        'desc' => $this->l('Enter a secret key'),
                         'label' => $this->l('Status after success payment'),
                         'options' => [
                             'query' => $options,

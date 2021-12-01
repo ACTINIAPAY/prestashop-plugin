@@ -197,10 +197,6 @@ class Actinia extends PaymentModule
         // CUSTOMER EMAIL
         $_sender_email = $this->context->customer->email ? $this->context->customer->email : '';
 
-        // CUSTOMER PHONE
-        $_invoice = new Address((int)$this->context->cart->id_address_invoice);
-        $_phone = ($_invoice->phone) ? $_invoice->phone : $_invoice->phone_mobile;
-
         // CURRENCY
         $payCurrency = $this->context->currency;
 
@@ -213,7 +209,6 @@ class Actinia extends PaymentModule
             'merchantId' => $this->merchant,
             'clientName' => sprintf('%s %s', $_firstname, $_lastname),
             'clientEmail' => $_sender_email,
-            'clientPhone' => $actiniaCls->preparePhone($_phone),
             'description' => $this->context->shop->name . ' #' . $params['order']->reference,
             'amount' => $actiniaCls->getAmount($total),
             'currency' => strtoupper($payCurrency->iso_code),
@@ -234,6 +229,11 @@ class Actinia extends PaymentModule
             ]
         ];
 
+        // CUSTOMER PHONE
+        $_invoice = new Address((int)$this->context->cart->id_address_invoice);
+        $_phone = ($_invoice->phone) ? $_invoice->phone : $_invoice->phone_mobile;
+        if(!empty($_phone))
+            $paymentData['clientPhone'] = $actiniaCls->preparePhone($_phone);
 
         $resData = $actiniaCls->setClientCodeName($this->clientcodename)
             ->setPrivateKey($this->privatekey)

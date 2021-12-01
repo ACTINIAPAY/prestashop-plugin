@@ -23,6 +23,7 @@ class Actinia extends PaymentModule
 
 
     private $settingsList = [
+        'ACTINIA_MDESCRIPTION',
         'ACTINIA_MERCHANT',
         'ACTINIA_CLIENTCODENAME',
         'ACTINIA_PRIVATEKEY',
@@ -41,6 +42,10 @@ class Actinia extends PaymentModule
         $this->need_instance = 0;
 
         $config = Configuration::getMultiple($this->settingsList);
+
+        if (!empty($config['ACTINIA_MDESCRIPTION'])) {
+            $this->mdescription = $config['ACTINIA_MDESCRIPTION'];
+        }
 
         if (!empty($config['ACTINIA_MERCHANT'])) {
             $this->merchant = $config['ACTINIA_MERCHANT'];
@@ -65,6 +70,7 @@ class Actinia extends PaymentModule
         $this->description = $this->trans('Payments via ACTINIA.', [], 'Modules.Actinia.Admin');
         $this->confirmUninstall = $this->trans('Are you sure you want to delete these details?', [], 'Modules.Actinia.Admin');
         $this->ps_versions_compliancy = ['min' => '1.7.1.0', 'max' => _PS_VERSION_];
+
     }
 
     public function install()
@@ -100,6 +106,10 @@ class Actinia extends PaymentModule
     private function postProcess()
     {
         if (Tools::isSubmit('submit'.$this->name)) {
+
+            $mdescription = strval(Tools::getValue('ACTINIA_MDESCRIPTION'));
+            Configuration::updateValue('ACTINIA_MDESCRIPTION', $mdescription);
+            $this->mdescription = $mdescription;
 
             $merchant = strval(Tools::getValue('ACTINIA_MERCHANT'));
             Configuration::updateValue('ACTINIA_MERCHANT', $merchant);
@@ -166,7 +176,7 @@ class Actinia extends PaymentModule
 
         $newOption = new PaymentOption();
         $newOption->setModuleName($this->name)
-            ->setCallToActionText($this->trans('Pay by Actinia', [], 'Modules.Actinia.Admin'))
+            ->setCallToActionText(!empty($this->mdescription) ? $this->mdescription : $this->trans('Pay by Actinia', [], 'Modules.Actinia.Admin'))
             ->setAction($this->context->link->getModuleLink($this->name, 'validation', [], true))
             ->setAdditionalInformation($this->fetch('module:actinia/views/templates/front/payment_infos.tpl'));
 
@@ -293,6 +303,12 @@ class Actinia extends PaymentModule
                     [
                         'col' => 4,
                         'type' => 'text',
+                        'name' => 'ACTINIA_MDESCRIPTION',
+                        'label' => $this->l('Description'),
+                    ],
+                    [
+                        'col' => 4,
+                        'type' => 'text',
                         'prefix' => '<i class="icon icon-user"></i>',
                         'desc' => $this->l('Enter a merchant id'),
                         'name' => 'ACTINIA_MERCHANT',
@@ -349,6 +365,7 @@ class Actinia extends PaymentModule
         $helper->currentIndex = AdminController::$currentIndex.'&configure='.$this->name;
         $helper->token = Tools::getAdminTokenLite('AdminModules');
 
+        $helper->fields_value['ACTINIA_MDESCRIPTION'] = $this->mdescription;
         $helper->fields_value['ACTINIA_MERCHANT'] = $this->merchant;
         $helper->fields_value['ACTINIA_CLIENTCODENAME'] = $this->clientcodename;
         $helper->fields_value['ACTINIA_PRIVATEKEY'] = $this->privatekey;

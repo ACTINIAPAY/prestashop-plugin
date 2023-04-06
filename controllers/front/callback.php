@@ -70,9 +70,9 @@ class ActiniaCallbackModuleFrontController extends ModuleFrontController
                 ->chkPublicKey()
                 ->isPaymentValid($callback);
 
-            if ($payment['merchantId'] !== $this->merchant) {
-                throw new Exception('not valid merchantId (|' . $payment['merchantId'] . ' | ' . $this->merchant . '|)');
-            }
+//             if ($payment['merchantId'] !== $this->merchant) {
+//                 throw new Exception('not valid merchantId (|' . $payment['merchantId'] . ' | ' . $this->merchant . '|)');
+//             }
 
             list($externalId,) = explode(ActiniaApi::ORDER_SEPARATOR, $payment['externalId']);
             $order = new Order($externalId);
